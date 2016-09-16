@@ -6,7 +6,7 @@
             [hyperion.filtering :as filter]
             [hyperion.sorting :as sort]
             [hyperion.mongo.types])
-  (:import  [com.mongodb ServerAddress MongoOptions Mongo WriteConcern BasicDBObject BasicDBList DB]
+  (:import  [com.mongodb ServerAddress MongoClient MongoClientOptions MongoClientOptions$Builder MongoCredential WriteConcern BasicDBObject BasicDBList DB]
             [javax.net.ssl SSLContext X509TrustManager SSLSocketFactory]
             [java.security SecureRandom]))
 
@@ -36,31 +36,41 @@
     (trusting-ssl-socket-factory)
     (SSLSocketFactory/getDefault)))
 
+(defn- ->mongo-credentials [args]
+  (let [{:keys [database username password]} (->options args)]
+    (if username
+      [(MongoCredential/createCredential username database (.toCharArray password))]
+      [])))
+
+(defn- ->mongo-options [args]
+  (let [{:keys [ssl]} (->options args)
+        builder (MongoClientOptions$Builder.)]
+    (when ssl
+      (.socketFactory builder (socket-factory ssl)))
+    (.build builder)))
+
 (defn open-mongo [& args]
   (let [{:keys [host port servers ssl] :or {port 27017}} (->options args)
         addresses (if host [(->address [host port])] [])
         addresses (doall (concat addresses (map ->address servers)))
-        mongo-options (MongoOptions.)]
-    (when ssl (.setSocketFactory mongo-options (socket-factory ssl)))
-    (Mongo. addresses mongo-options)))
+        mongo-credentials (->mongo-credentials args)
+        mongo-options (->mongo-options args)]
+    (MongoClient. addresses mongo-credentials mongo-options)))
 
 (defn ->write-concern [value]
   (case (keyword value)
     :fsync-safe WriteConcern/FSYNC_SAFE
     :journal-safe WriteConcern/JOURNAL_SAFE
     :majority WriteConcern/MAJORITY
-    :none WriteConcern/NONE
     :normal WriteConcern/NORMAL
     :replicas-safe WriteConcern/REPLICAS_SAFE
     :safe WriteConcern/SAFE
     (throw (Exception. (str "Unknown write-concern: " value)))))
 
 (defn open-database [mongo name & args]
-  (let [{:keys [write-concern username password] :or {write-concern :safe} :as options} (->options args)
+  (let [{:keys [write-concern] :or {write-concern :safe} :as options} (->options args)
         db (.getDB mongo name)]
     (.setWriteConcern db (->write-concern write-concern))
-    (when username
-      (.authenticate db username (.toCharArray password)))
     db))
 
 (defn- ->db-object [record]
@@ -99,9 +109,7 @@
   (let [collection (.getCollection db kind)
         db-objects (mapv ->db-object records)
         result (.insert collection db-objects)]
-    (if-let [error (.getError result)]
-      (throw (Exception. (str "Failed to save record(s): " error)))
-      (map (partial ->record kind) db-objects))))
+    (map (partial ->record kind) db-objects)))
 
 (defn- update-record [db {:keys [kind key] :as record}]
   (let [collection (.getCollection db kind)
@@ -204,4 +212,3 @@
           mongo (open-mongo options)
           db (open-database mongo database options)]
       (MongoDatastore. db))))
-
