@@ -1,4 +1,4 @@
-(defproject hyperion/hyperion-mongo "3.7.1"
+(defproject jassa/hyperion-mongo "3.8.0-SNAPSHOT"
   :description "Mongo Datastore for Hyperion"
   :dependencies [[org.clojure/clojure "1.5.1"]
                  [hyperion/hyperion-api "3.7.1"]
