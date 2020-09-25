@@ -6,7 +6,7 @@
             [hyperion.filtering :as filter]
             [hyperion.sorting :as sort]
             [hyperion.mongo.types])
-  (:import  [com.mongodb ServerAddress MongoClient MongoClientOptions MongoClientOptions$Builder MongoCredential WriteConcern BasicDBObject BasicDBList DB]
+  (:import  [com.mongodb ServerAddress MongoClientURI MongoClient MongoClientOptions MongoClientOptions$Builder MongoCredential WriteConcern BasicDBObject BasicDBList DB]
             [javax.net.ssl SSLContext X509TrustManager SSLSocketFactory]
             [java.security SecureRandom]))
 
@@ -49,13 +49,8 @@
       (.socketFactory builder (socket-factory ssl)))
     (.build builder)))
 
-(defn open-mongo [& args]
-  (let [{:keys [host port servers ssl] :or {port 27017}} (->options args)
-        addresses (if host [(->address [host port])] [])
-        addresses (doall (concat addresses (map ->address servers)))
-        mongo-credentials (->mongo-credentials args)
-        mongo-options (->mongo-options args)]
-    (MongoClient. addresses mongo-credentials mongo-options)))
+(defn open-mongo [connection-string]
+  (MongoClient. (MongoClientURI. connection-string)))
 
 (defn ->write-concern [value]
   (case (keyword value)
@@ -67,9 +62,9 @@
     :safe WriteConcern/SAFE
     (throw (Exception. (str "Unknown write-concern: " value)))))
 
-(defn open-database [mongo name & args]
+(defn open-database [mongo uri & args]
   (let [{:keys [write-concern] :or {write-concern :safe} :as options} (->options args)
-        db (.getDB mongo name)]
+        db (.getDB mongo (.getDatabase (MongoClientURI. uri)))]
     (.setWriteConcern db (->write-concern write-concern))
     db))
 
