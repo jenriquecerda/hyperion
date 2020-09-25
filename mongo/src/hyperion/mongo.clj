@@ -6,7 +6,7 @@
             [hyperion.filtering :as filter]
             [hyperion.sorting :as sort]
             [hyperion.mongo.types])
-  (:import  [com.mongodb ServerAddress MongoClient MongoClientOptions MongoClientOptions$Builder MongoCredential WriteConcern BasicDBObject BasicDBList DB]
+  (:import  [com.mongodb ServerAddress MongoClientURI MongoClient MongoClientOptions MongoClientOptions$Builder MongoCredential WriteConcern BasicDBObject BasicDBList DB]
             [javax.net.ssl SSLContext X509TrustManager SSLSocketFactory]
             [java.security SecureRandom]))
 
@@ -57,6 +57,9 @@
         mongo-options (->mongo-options args)]
     (MongoClient. addresses mongo-credentials mongo-options)))
 
+(defn open-mongo-v2 [connection-string]
+  (MongoClient. (MongoClientURI. connection-string)))
+
 (defn ->write-concern [value]
   (case (keyword value)
     :fsync-safe WriteConcern/FSYNC_SAFE
@@ -70,6 +73,12 @@
 (defn open-database [mongo name & args]
   (let [{:keys [write-concern] :or {write-concern :safe} :as options} (->options args)
         db (.getDB mongo name)]
+    (.setWriteConcern db (->write-concern write-concern))
+    db))
+
+(defn open-database-v2 [mongo uri & args]
+  (let [{:keys [write-concern] :or {write-concern :safe} :as options} (->options args)
+        db (.getDB mongo (.getDatabase (MongoClientURI. uri)))]
     (.setWriteConcern db (->write-concern write-concern))
     db))
 
